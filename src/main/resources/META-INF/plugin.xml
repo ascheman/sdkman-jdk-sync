@@ -1,0 +1,40 @@
+<idea-plugin>
+    <id>net.aschemann.sdkman-jdk-sync</id>
+    <name>JDK Sync for SDKMAN</name>
+    <vendor url="https://github.com/ascheman/sdkman-jdk-sync">Gerd Aschemann</vendor>
+
+    <description><![CDATA[
+    Keeps IntelliJ's Java SDK list lean and current, based on the JDKs installed with
+    <a href="https://sdkman.io">SDKMAN!</a>:
+    <ul>
+      <li>exactly one SDK per managed Java version (default: all LTS versions, as published by foojay),
+          always pointing to the newest installed patch release</li>
+      <li>other Java SDKs are removed; open projects are switched to the matching version first</li>
+      <li>"Settings for New Projects" use the newest managed version</li>
+      <li>stable paths for tools outside the IDE: <code>~/.jdks-lts/21</code> always points to the newest
+          installed Java 21 (optional), and Maven's <code>toolchains.xml</code> can be kept current (opt-in)</li>
+      <li>notifications about newer releases, installable via SDKMAN with one click</li>
+      <li>a warning when a project's <code>.sdkmanrc</code> pins an outdated Java version, with
+          one-click updates to the latest release of the line or the latest LTS line</li>
+    </ul>
+    The plugin queries the foojay Disco API (LTS versions) and the SDKMAN API (available releases).
+    Not affiliated with the SDKMAN! project.
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.java</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <postStartupActivity implementation="net.aschemann.sdkmanjdksync.ide.SdkmanJdkSyncStartup"/>
+        <applicationConfigurable parentId="tools" instance="net.aschemann.sdkmanjdksync.ide.SyncSettingsConfigurable"
+                                 id="net.aschemann.sdkman-jdk-sync" displayName="JDK Sync for SDKMAN"/>
+        <notificationGroup id="JDK Sync for SDKMAN" displayType="BALLOON"/>
+    </extensions>
+
+    <actions>
+        <action id="net.aschemann.sdkmanjdksync.SyncNow" class="net.aschemann.sdkmanjdksync.ide.SyncNowAction"
+                text="Sync SDKMAN JDKs Now" description="Synchronize the Java SDK list with SDKMAN">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+    </actions>
+</idea-plugin>
