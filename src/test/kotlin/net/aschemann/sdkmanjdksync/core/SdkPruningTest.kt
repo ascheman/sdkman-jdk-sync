@@ -62,6 +62,14 @@ class SdkPruningTest {
     }
 
     @Test
+    fun `keeps existing early access SDKs but not dead ones`() {
+        val ea = sdkman.resolve("28.0.0.0+ea.23-open").createDirectories()
+        assertFalse(remove("28-ea", ea.toString()))
+        assertFalse(remove("28-ea", ea.toString(), includeOutside = true))
+        assertTrue(remove("27-ea", sdkman.resolve("27.0.0.0+ea.30-open").toString()))
+    }
+
+    @Test
     fun `keep list wins over everything`() {
         val jdk = sdkman.resolve("27.0.0.0+35-tem").createDirectories()
         val keep = setOf("my 27", "dead but wanted")

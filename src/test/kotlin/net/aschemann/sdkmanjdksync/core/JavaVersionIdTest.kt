@@ -49,6 +49,13 @@ class JavaVersionIdTest {
     }
 
     @Test
+    fun `early access sorts below the release of the same version`() {
+        assertTrue(id("28.0.0+36-open") > id("28.0.0.0+ea.36-open"))
+        assertTrue(id("28.0.0+20-open") > id("28.0.0.0+ea.36-open"))
+        assertTrue(id("28.0.0.0+ea.25-open") > id("28.0.0.0+ea.23-open"))
+    }
+
+    @Test
     fun `rejects non-identifiers`() {
         assertNull(JavaVersionId.parse("current"))
         assertNull(JavaVersionId.parse(""))

@@ -71,6 +71,25 @@ class SelectionTest {
     }
 
     @Test
+    fun `early access pin is offered a newer early access build`() {
+        val options = upgradeOptions(ids("28.0.0.0+ea.21-open").single(), catalog, lts)
+        assertEquals("28.0.0.0+ea.23-open", options.latestOfLine?.identifier)
+        assertNull(options.latestLine)
+    }
+
+    @Test
+    fun `early access pin is offered the release once it exists`() {
+        val available = ids("28.0.0.0+ea.36-open", "28.0.0+36-open")
+        val options = upgradeOptions(available.first(), available, null)
+        assertEquals("28.0.0+36-open", options.latestOfLine?.identifier)
+    }
+
+    @Test
+    fun `newest early access build is not outdated`() {
+        assertFalse(upgradeOptions(ids("28.0.0.0+ea.23-open").single(), catalog, lts).isOutdated)
+    }
+
+    @Test
     fun `up to date version is not outdated`() {
         assertFalse(upgradeOptions(ids("25.0.5.0+8-tem").single(), catalog, lts).isOutdated)
     }

@@ -22,7 +22,10 @@ fun newestInstalledPerMajor(
 
 data class UpgradeOptions(
     val current: JavaVersionId,
-    /** Newest version of the same line (major, vendor, variant), if newer than [current]. */
+    /**
+     * Newest version of the same line (major, vendor, variant), if newer than [current]. An early
+     * access [current] also gets newer early access builds until there is a release.
+     */
     val latestOfLine: JavaVersionId?,
     /** Newest version of the newest (LTS) major of the same vendor/variant, if that major is newer. */
     val latestLine: JavaVersionId?,
@@ -36,7 +39,11 @@ data class UpgradeOptions(
  */
 fun upgradeOptions(current: JavaVersionId, available: Collection<JavaVersionId>, ltsMajors: Set<Int>?): UpgradeOptions {
     val candidates = available.filter { it.sameFlavor(current) && !it.earlyAccess }
-    val latestOfLine = candidates.filter { it.major == current.major }.maxOrNull()?.takeIf { it > current }
+    val newestEarlyAccess = available
+        .filter { current.earlyAccess && it.earlyAccess && it.sameLine(current) }
+        .maxOrNull()
+    val latestOfLine = (candidates.filter { it.major == current.major }.maxOrNull() ?: newestEarlyAccess)
+        ?.takeIf { it > current }
     val newestMajor = candidates
         .map { it.major }
         .filter { ltsMajors == null || it in ltsMajors }

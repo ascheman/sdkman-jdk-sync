@@ -10,14 +10,17 @@ object SdkPruning {
      * An SDK on the [keep] list always stays. Otherwise SDKs without a usable home are removed, as
      * are SDKs living under [sdkmanJava] (also via symlinks), whether or not their home still
      * exists. SDKs elsewhere (JBang, Gradle, manual installations, unplugged disks) are only
-     * removed with [includeOutside].
+     * removed with [includeOutside]. Existing early access JDKs stay: nothing manages them, and
+     * adding one is always deliberate.
      */
     fun shouldRemove(name: String, home: String?, keep: Set<String>, sdkmanJava: Path, includeOutside: Boolean): Boolean {
         if (name in keep) return false
-        if (includeOutside || home.isNullOrBlank()) return true
+        if (home.isNullOrBlank()) return true
         val path = runCatching { Path.of(home) }.getOrNull() ?: return true
         val sdkmanReal = runCatching { sdkmanJava.toRealPath() }.getOrNull()
         val real = runCatching { path.toRealPath() }.getOrNull()
+        if (real != null && JavaVersionId.parse(real.fileName.toString())?.earlyAccess == true) return false
+        if (includeOutside) return true
         if (real != null) return sdkmanReal != null && real.startsWith(sdkmanReal)
         val absolute = path.toAbsolutePath().normalize()
         return absolute.startsWith(sdkmanJava.toAbsolutePath().normalize()) ||

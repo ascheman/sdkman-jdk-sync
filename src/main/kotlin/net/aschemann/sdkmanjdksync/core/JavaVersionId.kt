@@ -24,7 +24,9 @@ data class JavaVersionId(
     fun sameLine(other: JavaVersionId): Boolean = major == other.major && sameFlavor(other)
 
     override fun compareTo(other: JavaVersionId): Int =
-        compareLists(numbers, other.numbers).takeIf { it != 0 } ?: compareLists(build, other.build)
+        compareLists(numbers, other.numbers).takeIf { it != 0 }
+            ?: other.earlyAccess.compareTo(earlyAccess).takeIf { it != 0 }
+            ?: compareLists(build, other.build)
 
     override fun toString(): String = identifier
 

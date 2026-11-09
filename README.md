@@ -46,8 +46,8 @@ separate opt-in.
   version. Without an SDK of that version the project is left alone: the SDK stays, and if it no
   longer exists a warning names the project and offers to switch. If another component adds a Java
   SDK later, the plugin cleans up again. The notification offers *Restore and keep* for anything
-  you want to retain, names on the "Never remove" list always stay, and a managed SDK you delete
-  yourself is not re-created.
+  you want to retain, names on the "Never remove" list and existing early-access JDKs always stay,
+  and a managed SDK you delete yourself is not re-created.
 - **Defaults for new projects.** "Settings for New Projects" use the newest managed version and its
   language level.
 - **Update notifications.** When SDKMAN offers a newer release of a managed line (same major,
@@ -55,7 +55,8 @@ separate opt-in.
   without changing your SDKMAN default). After installation the SDK entry is repointed.
 - **`.sdkmanrc` check.** When a project with an `.sdkmanrc` is opened and its `java=` entry is
   outdated, a notification offers to update it to the latest release of the same line or to the
-  latest LTS line (installing it via SDKMAN if necessary).
+  latest LTS line (installing it via SDKMAN if necessary). An early-access pin is offered newer
+  early-access builds, and the release once there is one; other pins are never offered early access.
 
 Syncs run on startup, hourly, after settings changes and via *Tools | Sync SDKMAN JDKs Now*.
 
