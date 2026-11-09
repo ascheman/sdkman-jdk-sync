@@ -7,6 +7,7 @@ import com.intellij.openapi.components.SimplePersistentStateComponent
 import com.intellij.openapi.components.State
 import com.intellij.openapi.components.Storage
 import com.intellij.openapi.components.service
+import net.aschemann.sdkmanjdksync.core.SdkPruning
 import java.nio.file.Path
 import java.nio.file.Paths
 
@@ -26,8 +27,17 @@ class SyncSettings : SimplePersistentStateComponent<SyncSettings.Options>(Option
         /** Keep the IDE's Java SDK list at exactly one entry per managed major. */
         var manageSdkTable by property(true)
 
-        /** Remove Java SDKs that are not managed (open projects are remapped first). */
+        /** Remove unmanaged Java SDKs that are dead or live under SDKMAN (open projects are remapped first). */
         var pruneUnmanaged by property(true)
+
+        /** Also remove existing Java SDKs outside SDKMAN (JBang, Gradle, manual installations). */
+        var pruneOutsideSdkman by property(false)
+
+        /** Comma-separated names of Java SDKs that are never removed. */
+        var keepSdks by string("")
+
+        /** Comma-separated majors whose managed SDK the user deleted; they are not re-created. */
+        var excludedMajors by string("")
 
         /** Major for "Settings for New Projects"; blank means the newest managed major. */
         var defaultMajor by string("")
@@ -68,6 +78,18 @@ class SyncSettings : SimplePersistentStateComponent<SyncSettings.Options>(Option
 
     val vendors: List<String>
         get() = state.vendorPreference.orEmpty().split(',', ' ').map { it.trim() }.filter { it.isNotEmpty() }
+
+    val keptSdks: Set<String> get() = SdkPruning.parseNames(state.keepSdks)
+
+    val excludedMajors: Set<Int> get() = SdkPruning.parseNames(state.excludedMajors).mapNotNull { it.toIntOrNull() }.toSortedSet()
+
+    fun keepSdks(names: Collection<String>) {
+        state.keepSdks = (keptSdks + names).joinToString(", ")
+    }
+
+    fun setExcluded(major: Int, excluded: Boolean) {
+        state.excludedMajors = (if (excluded) excludedMajors + major else excludedMajors - major).joinToString(", ")
+    }
 
     val linksPath: Path
         get() = expandHome(state.linksDir).ifBlank { "~/.jdks-lts" }.let { Paths.get(expandHome(it)) }

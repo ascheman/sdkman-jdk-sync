@@ -33,6 +33,7 @@ import kotlinx.coroutines.withContext
 import net.aschemann.sdkmanjdksync.core.JavaVersionId
 import net.aschemann.sdkmanjdksync.core.Lts
 import net.aschemann.sdkmanjdksync.core.MavenToolchains
+import net.aschemann.sdkmanjdksync.core.SdkPruning
 import net.aschemann.sdkmanjdksync.core.StableLinks
 import net.aschemann.sdkmanjdksync.core.SdkmanCatalog
 import net.aschemann.sdkmanjdksync.core.SdkmanCli
@@ -71,6 +72,10 @@ class JdkSyncService(private val cs: CoroutineScope) {
             object : ProjectJdkTable.Listener {
                 override fun jdkAdded(jdk: Sdk) {
                     if (!syncing.get() && jdk.sdkType is JavaSdk) requestSync()
+                }
+
+                override fun jdkRemoved(jdk: Sdk) {
+                    if (!syncing.get() && jdk.sdkType is JavaSdk) jdk.name.toIntOrNull()?.let { userRemovedManagedSdk(it) }
                 }
             },
         )
@@ -124,15 +129,19 @@ class JdkSyncService(private val cs: CoroutineScope) {
             .toMap()
 
         val changes = mutableListOf<String>()
+        var removed = emptyList<RemovedSdk>()
         if (best.isNotEmpty()) {
             changes += withContext(Dispatchers.IO) { syncOutsideIde(best, settings) }
         }
         if (settings.state.manageSdkTable && best.isNotEmpty()) {
-            changes += withContext(Dispatchers.EDT) { syncSdkTable(best, settings) }
+            val result = withContext(Dispatchers.EDT) { syncSdkTable(best, sdkman, settings) }
+            changes += result.changes
+            removed = result.removed
         }
         if (changes.isNotEmpty()) {
             Notifier.notify(null, "Java SDKs updated", changes.joinToString("<br>"), NotificationType.INFORMATION)
         }
+        if (removed.isNotEmpty()) notifyRemoved(removed)
         if (settings.state.checkUpdates) notifyUpdates(best.mapValues { it.value.first }, settings)
     }
 
@@ -172,8 +181,66 @@ class JdkSyncService(private val cs: CoroutineScope) {
         return changes
     }
 
-    private fun syncSdkTable(best: Map<Int, Pair<JavaVersionId, String>>, settings: SyncSettings): List<String> {
+    private data class RemovedSdk(val name: String, val home: String?)
+
+    private data class SdkTableResult(val changes: List<String>, val removed: List<RemovedSdk>)
+
+    private fun userRemovedManagedSdk(major: Int) {
+        SyncSettings.get().setExcluded(major, true)
+        Notifier.notify(
+            null,
+            "Java $major will no longer be managed",
+            "You removed the SDK, so it will not be re-created.",
+            NotificationType.INFORMATION,
+            "Manage again" to { _ ->
+                SyncSettings.get().setExcluded(major, false)
+                requestSync()
+            },
+        )
+    }
+
+    private fun notifyRemoved(removed: List<RemovedSdk>) {
+        val restorable = removed.filter { sdk -> sdk.home?.let { Files.isDirectory(Path.of(it)) } == true }
+        val actions = if (restorable.isEmpty()) {
+            emptyArray()
+        } else {
+            arrayOf("Restore and keep" to { _: Project? -> restoreAndKeep(restorable) })
+        }
+        Notifier.notify(
+            null,
+            "Other Java SDKs removed",
+            removed.joinToString(", ") { it.name },
+            NotificationType.INFORMATION,
+            *actions,
+        )
+    }
+
+    private fun restoreAndKeep(sdks: List<RemovedSdk>) {
+        SyncSettings.get().keepSdks(sdks.map { it.name })
+        ApplicationManager.getApplication().invokeLater {
+            syncing.set(true)
+            try {
+                WriteAction.run<RuntimeException> {
+                    val table = ProjectJdkTable.getInstance()
+                    for (sdk in sdks) {
+                        val home = sdk.home ?: continue
+                        if (table.findJdk(sdk.name) == null) table.addJdk(JavaSdk.getInstance().createJdk(sdk.name, home, false))
+                    }
+                }
+            } finally {
+                syncing.set(false)
+            }
+        }
+    }
+
+    private fun syncSdkTable(
+        best: Map<Int, Pair<JavaVersionId, String>>,
+        sdkman: SdkmanInstallation,
+        settings: SyncSettings,
+    ): SdkTableResult {
         val changes = mutableListOf<String>()
+        val removed = mutableListOf<RemovedSdk>()
+        val excluded = settings.excludedMajors
         syncing.set(true)
         try {
             WriteAction.run<RuntimeException> {
@@ -182,6 +249,7 @@ class JdkSyncService(private val cs: CoroutineScope) {
                 val managed = mutableMapOf<Int, Sdk>()
 
                 for ((major, entry) in best) {
+                    if (major in excluded) continue
                     val (id, home) = entry
                     val name = major.toString()
                     val existing = table.findJdk(name)
@@ -204,13 +272,17 @@ class JdkSyncService(private val cs: CoroutineScope) {
 
                 if (settings.state.pruneUnmanaged) {
                     val managedSet = managed.values.toSet()
-                    val unmanaged = table.allJdks.filter { it.sdkType is JavaSdk && it !in managedSet }
+                    val keep = settings.keptSdks + excluded.map { it.toString() }
+                    val unmanaged = table.allJdks.filter {
+                        it.sdkType is JavaSdk && it !in managedSet &&
+                            SdkPruning.shouldRemove(it.name, it.homePath, keep, sdkman.javaCandidates, settings.state.pruneOutsideSdkman)
+                    }
                     for (sdk in unmanaged) {
                         val replacement = replacementFor(sdk, managed)
                         if (replacement != null) remapProjects(sdk, replacement)
+                        removed += RemovedSdk(sdk.name, sdk.homePath)
                         table.removeJdk(sdk)
                     }
-                    if (unmanaged.isNotEmpty()) changes += "Removed ${unmanaged.size} other Java SDK(s): ${unmanaged.joinToString { it.name }}"
                 }
 
                 val defaultMajor = settings.state.defaultMajor?.trim()?.toIntOrNull() ?: managed.keys.maxOrNull()
@@ -219,7 +291,7 @@ class JdkSyncService(private val cs: CoroutineScope) {
         } finally {
             syncing.set(false)
         }
-        return changes
+        return SdkTableResult(changes, removed)
     }
 
     /** Same major if managed, otherwise the next higher managed major, otherwise the newest. */

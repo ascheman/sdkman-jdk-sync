@@ -15,7 +15,7 @@ import kotlin.io.path.readText
 /** A local SDKMAN installation (default `$SDKMAN_DIR` or `~/.sdkman`). */
 class SdkmanInstallation(val dir: Path) {
 
-    private val javaCandidates: Path get() = dir.resolve("candidates/java")
+    val javaCandidates: Path get() = dir.resolve("candidates/java")
 
     val exists: Boolean get() = javaCandidates.isDirectory()
 

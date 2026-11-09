@@ -35,8 +35,24 @@ class SyncSettingsConfigurable : BoundConfigurable("JDK Sync for SDKMAN") {
                     .bindSelected({ options.manageSdkTable }, { options.manageSdkTable = it })
             }
             row {
-                checkBox("Remove all other Java SDKs (open projects are switched to the matching version first)")
+                checkBox("Remove other Java SDKs that are dead or live under SDKMAN")
                     .bindSelected({ options.pruneUnmanaged }, { options.pruneUnmanaged = it })
+                    .comment("Open projects are switched to the matching version first")
+            }
+            indent {
+                row {
+                    checkBox("Also remove Java SDKs outside SDKMAN (JBang, Gradle, manual installations)")
+                        .bindSelected({ options.pruneOutsideSdkman }, { options.pruneOutsideSdkman = it })
+                }
+                row("Never remove:") {
+                    textField().bindText({ options.keepSdks.orEmpty() }, { options.keepSdks = it })
+                        .align(AlignX.FILL)
+                        .comment("Comma-separated SDK names, e.g. my-27, temurin-21 (7)")
+                }
+            }
+            row("Do not re-create:") {
+                textField().bindText({ options.excludedMajors.orEmpty() }, { options.excludedMajors = it })
+                    .comment("Versions whose SDK you deleted yourself. Remove a version here to get its SDK back")
             }
             row("Default for new projects:") {
                 textField().bindText({ options.defaultMajor.orEmpty() }, { options.defaultMajor = it })
