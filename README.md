@@ -1,4 +1,4 @@
-# JDK Sync for SDKMAN
+# Sync SDKMAN
 
 An IntelliJ IDEA plugin that keeps the IDE's Java SDK list lean and current, based on the JDKs
 installed with [SDKMAN!](https://sdkman.io).
@@ -62,7 +62,7 @@ Syncs run on startup, hourly, after settings changes and via *Tools | Sync SDKMA
 
 ## Settings
 
-*Settings | Tools | JDK Sync for SDKMAN*
+*Settings | Tools | Sync SDKMAN*
 
 | Setting | Default |
 |---|---|

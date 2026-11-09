@@ -9,7 +9,7 @@ import com.intellij.ui.dsl.builder.bindSelected
 import com.intellij.ui.dsl.builder.bindText
 import com.intellij.ui.dsl.builder.panel
 
-class SyncSettingsConfigurable : BoundConfigurable("JDK Sync for SDKMAN") {
+class SyncSettingsConfigurable : BoundConfigurable("Sync SDKMAN") {
 
     private val options get() = SyncSettings.get().state
 

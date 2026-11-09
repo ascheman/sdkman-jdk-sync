@@ -1,1 +1,1 @@
-rootProject.name = "sdkman-jdk-sync"
+rootProject.name = "sync-sdkman"

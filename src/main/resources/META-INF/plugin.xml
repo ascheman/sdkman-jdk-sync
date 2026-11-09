@@ -1,7 +1,7 @@
 <idea-plugin>
-    <id>net.aschemann.sdkman-jdk-sync</id>
-    <name>JDK Sync for SDKMAN</name>
-    <vendor url="https://github.com/ascheman/sdkman-jdk-sync">Gerd Aschemann</vendor>
+    <id>net.aschemann.sync-sdkman</id>
+    <name>Sync SDKMAN</name>
+    <vendor url="https://github.com/ascheman/sync-sdkman">Gerd Aschemann</vendor>
 
     <description><![CDATA[
     Keeps IntelliJ's Java SDK list lean and current, based on the JDKs installed with
@@ -28,8 +28,8 @@
     <extensions defaultExtensionNs="com.intellij">
         <postStartupActivity implementation="net.aschemann.sdkmanjdksync.ide.SdkmanJdkSyncStartup"/>
         <applicationConfigurable parentId="tools" instance="net.aschemann.sdkmanjdksync.ide.SyncSettingsConfigurable"
-                                 id="net.aschemann.sdkman-jdk-sync" displayName="JDK Sync for SDKMAN"/>
-        <notificationGroup id="JDK Sync for SDKMAN" displayType="BALLOON"/>
+                                 id="net.aschemann.sync-sdkman" displayName="Sync SDKMAN"/>
+        <notificationGroup id="Sync SDKMAN" displayType="BALLOON"/>
     </extensions>
 
     <actions>
