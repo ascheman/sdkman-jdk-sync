@@ -40,12 +40,14 @@ separate opt-in.
 - **One SDK per Java version.** For each managed major (default: all LTS versions, as published by
   the [foojay Disco API](https://api.foojay.io)) there is exactly one Java SDK, named by its major
   (`8`, `11`, `17`, `21`, `25`), pointing to the newest installed SDKMAN patch release.
-- **Cleanup that respects your choices.** Other Java SDKs are removed if their home no longer
-  exists or lives under SDKMAN; JDKs elsewhere (JBang, Gradle, manual installations) stay unless
-  you opt in. Open projects and modules that use a removed SDK are switched to the same (or next
-  higher) version first. If another component adds a Java SDK later, the plugin cleans up again.
-  The notification offers *Restore and keep* for anything you want to retain, names on the
-  "Never remove" list always stay, and a managed SDK you delete yourself is not re-created.
+- **Cleanup that respects your choices.** Other Java SDKs under SDKMAN are removed, also if their
+  home no longer exists; JDKs elsewhere (JBang, Gradle, manual installations, unplugged disks) stay
+  unless you opt in. Open projects and modules using a removed SDK only move within the same Java
+  version. Without an SDK of that version the project is left alone: the SDK stays, and if it no
+  longer exists a warning names the project and offers to switch. If another component adds a Java
+  SDK later, the plugin cleans up again. The notification offers *Restore and keep* for anything
+  you want to retain, names on the "Never remove" list always stay, and a managed SDK you delete
+  yourself is not re-created.
 - **Defaults for new projects.** "Settings for New Projects" use the newest managed version and its
   language level.
 - **Update notifications.** When SDKMAN offers a newer release of a managed line (same major,
@@ -67,7 +69,7 @@ Syncs run on startup, hourly, after settings changes and via *Tools | Sync SDKMA
 | Managed versions | empty = all LTS versions; or e.g. `17, 21, 25` |
 | Vendor preference | `tem, zulu, amzn` (SDKMAN vendor suffixes) |
 | Keep one Java SDK per managed version | on |
-| Remove other Java SDKs that are dead or live under SDKMAN | on |
+| Remove other Java SDKs under SDKMAN, including dead ones | on |
 | Also remove Java SDKs outside SDKMAN | off |
 | Never remove | empty; comma-separated SDK names |
 | Do not re-create | filled automatically when you delete a managed SDK |

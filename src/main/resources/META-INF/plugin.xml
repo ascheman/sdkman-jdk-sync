@@ -9,8 +9,8 @@
     <ul>
       <li>exactly one SDK per managed Java version (default: all LTS versions, as published by foojay),
           always pointing to the newest installed patch release</li>
-      <li>dead SDKs and other SDKs under SDKMAN are removed; open projects are switched to the matching
-          version first, and JDKs elsewhere or on your keep list stay</li>
+      <li>other SDKs under SDKMAN are removed, also dead ones; open projects only move within the same
+          Java version, and JDKs elsewhere or on your keep list stay</li>
       <li>"Settings for New Projects" use the newest managed version</li>
       <li>stable paths for tools outside the IDE: <code>~/.jdks-lts/21</code> always points to the newest
           installed Java 21 (optional), and Maven's <code>toolchains.xml</code> can be kept current (opt-in)</li>

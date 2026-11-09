@@ -8,6 +8,7 @@ import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.application.WriteAction
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.thisLogger
+import com.intellij.openapi.module.Module
 import com.intellij.openapi.module.ModuleManager
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.Task
@@ -64,6 +65,7 @@ class JdkSyncService(private val cs: CoroutineScope) {
 
     private var catalog: List<JavaVersionId> = emptyList()
     private var catalogFetched = 0L
+    private val notifiedInvalid = mutableSetOf<InvalidSdk>()
 
     fun ensureStarted() {
         if (!started.compareAndSet(false, true)) return
@@ -130,6 +132,7 @@ class JdkSyncService(private val cs: CoroutineScope) {
 
         val changes = mutableListOf<String>()
         var removed = emptyList<RemovedSdk>()
+        var invalid = emptyList<InvalidSdk>()
         if (best.isNotEmpty()) {
             changes += withContext(Dispatchers.IO) { syncOutsideIde(best, settings) }
         }
@@ -137,11 +140,13 @@ class JdkSyncService(private val cs: CoroutineScope) {
             val result = withContext(Dispatchers.EDT) { syncSdkTable(best, sdkman, settings) }
             changes += result.changes
             removed = result.removed
+            invalid = result.invalid
         }
         if (changes.isNotEmpty()) {
             Notifier.notify(null, "Java SDKs updated", changes.joinToString("<br>"), NotificationType.INFORMATION)
         }
         if (removed.isNotEmpty()) notifyRemoved(removed)
+        notifyInvalid(invalid)
         if (settings.state.checkUpdates) notifyUpdates(best.mapValues { it.value.first }, settings)
     }
 
@@ -183,7 +188,10 @@ class JdkSyncService(private val cs: CoroutineScope) {
 
     private data class RemovedSdk(val name: String, val home: String?)
 
-    private data class SdkTableResult(val changes: List<String>, val removed: List<RemovedSdk>)
+    /** A dead SDK that stays because open [projects] still select it and no SDK of the same major exists. */
+    private data class InvalidSdk(val name: String, val projects: List<String>, val suggestion: String?)
+
+    private data class SdkTableResult(val changes: List<String>, val removed: List<RemovedSdk>, val invalid: List<InvalidSdk>)
 
     private fun userRemovedManagedSdk(major: Int) {
         SyncSettings.get().setExcluded(major, true)
@@ -200,7 +208,7 @@ class JdkSyncService(private val cs: CoroutineScope) {
     }
 
     private fun notifyRemoved(removed: List<RemovedSdk>) {
-        val restorable = removed.filter { sdk -> sdk.home?.let { Files.isDirectory(Path.of(it)) } == true }
+        val restorable = removed.filter { homeExists(it.home) }
         val actions = if (restorable.isEmpty()) {
             emptyArray()
         } else {
@@ -213,6 +221,39 @@ class JdkSyncService(private val cs: CoroutineScope) {
             NotificationType.INFORMATION,
             *actions,
         )
+    }
+
+    private fun homeExists(home: String?): Boolean =
+        home != null && runCatching { Files.isDirectory(Path.of(home)) }.getOrDefault(false)
+
+    /** Once per situation: the hourly sync must not repeat a warning the user has already seen. */
+    private fun notifyInvalid(invalid: List<InvalidSdk>) {
+        notifiedInvalid.retainAll(invalid.toSet())
+        for (sdk in invalid) {
+            if (!notifiedInvalid.add(sdk)) continue
+            val actions = sdk.suggestion?.let { target ->
+                arrayOf("Switch to $target" to { _: Project? -> switchProjects(sdk.name, target) })
+            } ?: emptyArray()
+            Notifier.notify(
+                null,
+                "Java SDK ${sdk.name} no longer exists",
+                "Still selected in ${sdk.projects.joinToString(", ")}. It stays selected until you choose another SDK.",
+                NotificationType.WARNING,
+                *actions,
+            )
+        }
+    }
+
+    private fun switchProjects(from: String, to: String) {
+        ApplicationManager.getApplication().invokeLater {
+            WriteAction.run<RuntimeException> {
+                val table = ProjectJdkTable.getInstance()
+                val old = table.findJdk(from) ?: return@run
+                val replacement = table.findJdk(to) ?: return@run
+                remapProjects(old, replacement)
+            }
+            requestSync()
+        }
     }
 
     private fun restoreAndKeep(sdks: List<RemovedSdk>) {
@@ -240,6 +281,7 @@ class JdkSyncService(private val cs: CoroutineScope) {
     ): SdkTableResult {
         val changes = mutableListOf<String>()
         val removed = mutableListOf<RemovedSdk>()
+        val invalid = mutableListOf<InvalidSdk>()
         val excluded = settings.excludedMajors
         syncing.set(true)
         try {
@@ -278,8 +320,20 @@ class JdkSyncService(private val cs: CoroutineScope) {
                             SdkPruning.shouldRemove(it.name, it.homePath, keep, sdkman.javaCandidates, settings.state.pruneOutsideSdkman)
                     }
                     for (sdk in unmanaged) {
-                        val replacement = replacementFor(sdk, managed)
-                        if (replacement != null) remapProjects(sdk, replacement)
+                        val major = javaMajorFromVersionString(sdk.versionString)
+                        val replacement = SdkPruning.automaticReplacement(major, managed.keys)?.let { managed[it] }
+                        if (replacement != null) {
+                            remapProjects(sdk, replacement).forEach { changes += "$it: ${sdk.name} → ${replacement.name}" }
+                        } else {
+                            val users = projectsUsing(sdk).map { it.name }
+                            if (users.isNotEmpty()) {
+                                if (!homeExists(sdk.homePath)) {
+                                    val suggestion = SdkPruning.suggestedReplacement(major, managed.keys)?.let { managed[it]?.name }
+                                    invalid += InvalidSdk(sdk.name, users, suggestion)
+                                }
+                                continue
+                            }
+                        }
                         removed += RemovedSdk(sdk.name, sdk.homePath)
                         table.removeJdk(sdk)
                     }
@@ -291,26 +345,30 @@ class JdkSyncService(private val cs: CoroutineScope) {
         } finally {
             syncing.set(false)
         }
-        return SdkTableResult(changes, removed)
+        return SdkTableResult(changes, removed, invalid)
     }
 
-    /** Same major if managed, otherwise the next higher managed major, otherwise the newest. */
-    private fun replacementFor(sdk: Sdk, managed: Map<Int, Sdk>): Sdk? {
-        val major = javaMajorFromVersionString(sdk.versionString) ?: return managed[managed.keys.maxOrNull()]
-        return managed[major] ?: managed.keys.filter { it > major }.minOrNull()?.let { managed[it] } ?: managed[managed.keys.maxOrNull()]
+    private fun usesDirectly(module: Module, sdk: Sdk): Boolean {
+        val roots = ModuleRootManager.getInstance(module)
+        return !roots.isSdkInherited && roots.sdk?.name == sdk.name
     }
 
-    private fun remapProjects(old: Sdk, replacement: Sdk) {
-        for (project in ProjectManager.getInstance().openProjects) {
+    private fun projectsUsing(sdk: Sdk): List<Project> = ProjectManager.getInstance().openProjects.filter { project ->
+        ProjectRootManager.getInstance(project).projectSdkName == sdk.name ||
+            ModuleManager.getInstance(project).modules.any { usesDirectly(it, sdk) }
+    }
+
+    /** Returns the names of the projects that were switched. */
+    private fun remapProjects(old: Sdk, replacement: Sdk): List<String> {
+        val affected = projectsUsing(old)
+        for (project in affected) {
             val roots = ProjectRootManager.getInstance(project)
             if (roots.projectSdkName == old.name) roots.projectSdk = replacement
             for (module in ModuleManager.getInstance(project).modules) {
-                val moduleRoots = ModuleRootManager.getInstance(module)
-                if (!moduleRoots.isSdkInherited && moduleRoots.sdk?.name == old.name) {
-                    ModuleRootModificationUtil.setModuleSdk(module, replacement)
-                }
+                if (usesDirectly(module, old)) ModuleRootModificationUtil.setModuleSdk(module, replacement)
             }
         }
+        return affected.map { it.name }
     }
 
     private fun setDefaultProjectSdk(sdk: Sdk) {

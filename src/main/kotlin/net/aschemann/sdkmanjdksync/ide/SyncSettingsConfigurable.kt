@@ -35,13 +35,13 @@ class SyncSettingsConfigurable : BoundConfigurable("JDK Sync for SDKMAN") {
                     .bindSelected({ options.manageSdkTable }, { options.manageSdkTable = it })
             }
             row {
-                checkBox("Remove other Java SDKs that are dead or live under SDKMAN")
+                checkBox("Remove other Java SDKs under SDKMAN, including dead ones")
                     .bindSelected({ options.pruneUnmanaged }, { options.pruneUnmanaged = it })
-                    .comment("Open projects are switched to the matching version first")
+                    .comment("Open projects only move within the same Java version; an SDK they still need otherwise stays")
             }
             indent {
                 row {
-                    checkBox("Also remove Java SDKs outside SDKMAN (JBang, Gradle, manual installations)")
+                    checkBox("Also remove Java SDKs outside SDKMAN (JBang, Gradle, manual installations, dead ones)")
                         .bindSelected({ options.pruneOutsideSdkman }, { options.pruneOutsideSdkman = it })
                 }
                 row("Never remove:") {
